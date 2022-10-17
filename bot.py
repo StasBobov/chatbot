@@ -69,18 +69,20 @@ class Bot:
         """
         if event.type != VkBotEventType.MESSAGE_NEW:
             return
-        user_id = event.message['from_id']
-        text = event.message['text']
+        # user_id = event.message['from_id']
+        user_id = event.object['message']['from_id']
+        # text = event.message['text']
+        text = event.object['message']['text']
         if user_id in self.user_states:
             # продолжаем сценарий
             text_to_send = self.continue_scenario(user_id=user_id, text=text)
         else:
             # ищем новый интент
             go = True
-            for intent in settings.INTENTS:
+            for intent in settings.INTENTS: # пробегаемся по нашим паттернам
                 if go:
-                    for token in intent['tokens'].split():
-                        if text.find(token) != -1:
+                    for token in intent['tokens'].split(): # проверяем каждый токен в паттерне
+                        if text.lower().find(token) != -1:
                             if intent['answer']:
                                 text_to_send = intent['answer']
                                 log.debug('Пользователь с ID: %d интересовался нашим мероприятием', user_id)
