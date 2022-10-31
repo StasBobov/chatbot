@@ -3,10 +3,20 @@ from pprint import pprint
 from unittest import TestCase
 from unittest.mock import patch, Mock, ANY
 
+from pony.orm import db_session, rollback
 from vk_api.bot_longpoll import VkBotMessageEvent, VkBotEvent
 
 import settings
 from bot import Bot
+from generate_ticket import generate_ticket
+
+
+def isolate_db(test_funk):
+    def wrapper(*args, **kwargs):
+        with db_session:
+            test_funk(*args, **kwargs)
+            rollback()
+    return wrapper
 
 
 class Test1(TestCase):
@@ -55,16 +65,19 @@ class Test1(TestCase):
         settings.SCENARIOS['registration']['steps']['step2']['failure_text'],
         settings.SCENARIOS['registration']['steps']['step3']['text'].format(name='Вениамин', email='email@mail.ru')
     ]
+
+    @isolate_db
     def test_run_ok(self):
         send_mock = Mock()
         api_mock = Mock()
-        api_mock.messages.send: Mock = send_mock
+        api_mock.messages.send = send_mock
 
         events = []
         for input_text in self.INPUTS:
             event = deepcopy(self.RAW_EVENT) # возвращает полную копию целого объекта self.RAW_EVENT
             event['object']['message']['text'] = input_text
             events.append(VkBotMessageEvent(event))
+
 
         long_poller_mock = Mock()
         long_poller_mock.listen = Mock(return_value=events)
@@ -76,11 +89,31 @@ class Test1(TestCase):
 
         # валидируем, что функция запускалась столько же раз, сколько было input-ов
         assert send_mock.call_count == len(self.INPUTS)
+
         real_outputs = []
         for call in send_mock.call_args_list:
+            print(send_mock.call_args_list)
             args, kwargs = call
             real_outputs.append(kwargs['message'])
         assert real_outputs == self.EXPECTED_OUTPUTS
+
+    def test_image_generation(self):
+        # создаём Mock объект, content которого возвращает подготовленный заранее верный файл
+        with open('files/adventurer.png', 'rb') as avatar_file:
+            avatar_mock = Mock()
+            avatar_mock.content = avatar_file.read()
+
+        # подменяем вместо функции requests.get - avatar_mock
+        with patch('requests.get', return_value=avatar_mock):
+            ticket_file = generate_ticket('defd', 'dss@dgh.tu')
+
+        # открываем заранее заготовленный корректный файл с результатом
+        with open('files/ticket_example.png', 'rb') as exepted_file:
+            expected_bytes = exepted_file.read()
+
+        # сравниваем значение возврата функции generate_ticket('defd', 'dss@dgh.tu') и корректный ответ
+        assert ticket_file.read() == expected_bytes
+
 
 
 

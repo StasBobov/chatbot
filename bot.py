@@ -6,7 +6,7 @@ from pony.orm import db_session
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 import handlers
-from models import UserState
+from models import UserState, Registration
 
 log = logging.getLogger('bot')
 
@@ -71,7 +71,7 @@ class Bot:
 
         if state is not None:
             # продолжаем сценарий
-            text_to_send = self.continue_scenario(user_id=user_id, text=text, state=state)
+            self.continue_scenario(user_id=user_id, text=text, state=state)
         else:
             # ищем новый интент
             go = True
@@ -80,37 +80,48 @@ class Bot:
                     for token in intent['tokens'].split(): # проверяем каждый токен в паттерне
                         if text.lower().find(token) != -1:
                             if intent['answer']:
-                                text_to_send = intent['answer']
+                                self.send_text(text_to_send=intent['answer'], user_id=user_id)
                                 log.debug('Пользователь с ID: %d интересовался нашим мероприятием', user_id)
                             else:
-                                text_to_send = self.start_scenario(user_id, intent['scenario'])
+                                self.start_scenario(user_id, intent['scenario'], text)
                             go = False
                             break
                         else:
-                            text_to_send = settings.DEFAULT_ANSWER
+                            self.send_text(text_to_send=settings.DEFAULT_ANSWER, user_id=user_id)
 
+    def send_text(self, text_to_send, user_id):
         self.api.messages.send(peer_id=user_id,
                                message=text_to_send,
                                 random_id=random.randint(0, 2 ** 20))
 
-    def start_scenario(self, user_id, scenario_name):
+    def send_image(self, image, user_id):
+        pass
+
+    def send_step(self, step, user_id, text, context):
+        if 'text' in step:
+            # отформатировали текст при помощи значений state.context
+            self.send_text(text_to_send=step['text'].format(**context), user_id=user_id)
+        if 'image' in step:
+            handler = getattr(handlers, step['image'])
+            image = handler(text, context)
+            self.send_image(image=image, user_id=user_id)
+
+    def start_scenario(self, user_id, scenario_name, text):
         scenario = settings.SCENARIOS[scenario_name]
         first_step = scenario['first_step']
         step = scenario['steps'][first_step]
-        text_to_send = step['text']
+        self.send_step(step=step, user_id=user_id, text=text, context={})
         # self.user_states[user_id] = UserState(scenario_name=scenario_name, step_name=first_step, context={})
         UserState(user_id=str(user_id), scenario_name=scenario_name, step_name=first_step, context={})
-        return text_to_send
 
 
     def continue_scenario(self, user_id, text, state):
         steps = settings.SCENARIOS[state.scenario_name]['steps']
         step = steps[state.step_name]
-
         handler = getattr(handlers, step['handler']) # находит функцию handle_name или handle_event
         if handler(text=text, context=state.context):
             next_step = steps[step['next_step']]
-            text_to_send = next_step['text'].format(**state.context) # отформатировали текст при помощи значений state.context
+            self.send_step(next_step, user_id, text, state.context)
             if next_step['next_step']:
                 state.step_name = step['next_step']
                 log.debug('Пользователь с ID: %d, внёс информацию: %s', user_id,
@@ -118,10 +129,11 @@ class Bot:
             else:
                 log.debug('Зарегистрировался пользователь с ID: %d, name: %s, с email: %s', user_id,
                           state.context['name'], state.context['email'])
+                Registration(name=state.context['name'], email=state.context['email'])
                 state.delete()
         else:
             text_to_send = step['failure_text'].format(**state.context)
-        return text_to_send
+            self.send_text(text_to_send=text_to_send, user_id=user_id)
 
 
 if __name__ == '__main__':
