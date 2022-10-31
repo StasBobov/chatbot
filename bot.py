@@ -74,20 +74,17 @@ class Bot:
             self.continue_scenario(user_id=user_id, text=text, state=state)
         else:
             # ищем новый интент
-            go = True
             for intent in settings.INTENTS: # пробегаемся по нашим паттернам
-                if go:
-                    for token in intent['tokens'].split(): # проверяем каждый токен в паттерне
-                        if text.lower().find(token) != -1:
-                            if intent['answer']:
-                                self.send_text(text_to_send=intent['answer'], user_id=user_id)
-                                log.debug('Пользователь с ID: %d интересовался нашим мероприятием', user_id)
-                            else:
-                                self.start_scenario(user_id, intent['scenario'], text)
-                            go = False
-                            break
+                for token in intent['tokens'].split(): # проверяем каждый токен в паттерне
+                    if text.lower().find(token) != -1:
+                        if intent['answer']:
+                            self.send_text(text_to_send=intent['answer'], user_id=user_id)
+                            log.debug('Пользователь с ID: %d интересовался нашим мероприятием', user_id)
                         else:
-                            self.send_text(text_to_send=settings.DEFAULT_ANSWER, user_id=user_id)
+                            self.start_scenario(user_id, intent['scenario'], text)
+                        return
+            else:
+                self.send_text(text_to_send=settings.DEFAULT_ANSWER, user_id=user_id)
 
     def send_text(self, text_to_send, user_id):
         self.api.messages.send(peer_id=user_id,
