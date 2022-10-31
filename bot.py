@@ -1,4 +1,6 @@
 import random
+
+import requests
 import vk_api
 import logging
 
@@ -44,7 +46,6 @@ class Bot:
         self.vk = vk_api.VkApi(token=token)
         self.long_poller = VkBotLongPoll(self.vk, self.group_id)
         self.api = self.vk.get_api()
-        # self.user_states = dict() # user ID : user state
 
     def run(self):
         """ Запуск бота"""
@@ -92,7 +93,19 @@ class Bot:
                                 random_id=random.randint(0, 2 ** 20))
 
     def send_image(self, image, user_id):
-        pass
+        # получаем доступ к серверу
+        upload_url = self.api.photos.getMessagesUploadServer()['upload_url']
+        # передаём файл
+        upload_data = requests.post(url=upload_url, files={'photo' : ('image.png', image, 'image/png')}).json()
+        # сохраняем файл
+        image_data = self.api.photos.saveMessagesPhoto(**upload_data)
+        # отправляем файл пользователю
+        owner_id = image_data[0]['owner_id']
+        media_id = image_data[0]['id']
+        attachment = f'photo{owner_id}_{media_id}'
+        self.api.messages.send(peer_id=user_id,
+                               attachment=attachment,
+                               random_id=random.randint(0, 2 ** 20))
 
     def send_step(self, step, user_id, text, context):
         if 'text' in step:

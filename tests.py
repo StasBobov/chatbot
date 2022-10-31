@@ -41,6 +41,7 @@ class Test1(TestCase):
             with patch('bot.VkBotLongPoll', return_value=long_poller_listen_mock):
                 bot = Bot('', '')
                 bot.on_event = Mock()
+                bot.send_image = Mock()
                 bot.run()
 
                 bot.on_event.assert_called()
@@ -85,6 +86,7 @@ class Test1(TestCase):
         with patch('bot.VkBotLongPoll', return_value=long_poller_mock):
             bot = Bot('', '')
             bot.api = api_mock
+            bot.send_image = Mock()
             bot.run()
 
         # валидируем, что функция запускалась столько же раз, сколько было input-ов
@@ -92,7 +94,6 @@ class Test1(TestCase):
 
         real_outputs = []
         for call in send_mock.call_args_list:
-            print(send_mock.call_args_list)
             args, kwargs = call
             real_outputs.append(kwargs['message'])
         assert real_outputs == self.EXPECTED_OUTPUTS
